@@ -3,12 +3,13 @@ import pygame
 
 class Player(Entidade):
     def __init__(self, x, y):
-        super().__init__(x, y, 32, 32, (255, 255, 255))
+        super().__init__(x, y, 50, 60, (255, 255, 255))
 
         # movimento
         self.velocidade = 5
         self.velx = 0
         self.vely = 0
+        self.direcao = None
 
         # física
         self.gravidade = 0.5
@@ -50,8 +51,10 @@ class Player(Entidade):
 
         if teclas[pygame.K_LEFT]:
             self.velx = -self.velocidade
+            self.direcao = "ESQUERDA"
         if teclas[pygame.K_RIGHT]:
             self.velx = self.velocidade
+            self.direcao = "DIREITA"
 
         # =====================
         # MOVIMENTO X + COLISÃO
