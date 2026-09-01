@@ -1,5 +1,7 @@
 import pygame
+import math
 from entidade import Entidade
+from utils import criar_explosao
 
 
 class Inimigo(Entidade):
@@ -14,8 +16,6 @@ class Inimigo(Entidade):
         # MOVIMENTO
         # =========================
         self.vel = 1.5
-
-        # Começa olhando/movendo para a esquerda
         self.direcao = self.ESQUERDA
 
         # =========================
@@ -31,11 +31,22 @@ class Inimigo(Entidade):
         self.estado = "patrulha"
         self.distancia_visao = 180
 
+        self.contado = False
+
+        # =========================
+        # EXPLOSÃO 
+        # =========================
+        self.particulas = []
+
     # =========================
     # MORTE
     # =========================
     def morrer(self):
         self.ativo = False
+        self.particulas = criar_explosao(self.rect.centerx, self.rect.centery)
+
+    def definir_dano(self, eliminacoes):
+        self.dano = math.ceil(1 + eliminacoes * 0.1)
 
     # =========================
     # DANO
@@ -56,9 +67,21 @@ class Inimigo(Entidade):
         self.direcao = self.DIREITA
 
     # =========================
+    # PARTÍCULAS DA EXPLOSÃO
+    # =========================
+    def atualizar_particulas(self):
+        for p in self.particulas:
+            p.update()
+        self.particulas = [p for p in self.particulas if p.esta_viva()]
+
+    def desenhar_particulas(self, tela):
+        for p in self.particulas:
+            p.desenhar(tela)
+
+    # =========================
     # UPDATE
     # =========================
-    def update(self, player, plataformas):
+    def update(self, player, plataformas, eliminacoes):
 
         if not self.ativo:
             return
@@ -115,7 +138,6 @@ class Inimigo(Entidade):
                 encontrou_chao = True
                 break
 
-        # Se não houver chão à frente, vira
         if not encontrou_chao:
 
             self.direcao *= -1
@@ -145,3 +167,4 @@ class Inimigo(Entidade):
                 self.direcao *= -1
 
                 break
+        self.definir_dano(eliminacoes)

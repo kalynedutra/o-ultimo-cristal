@@ -2,11 +2,13 @@ import pygame
 from player import Player
 from cristal import Cristal
 from inimigo import Inimigo
+from utils import aplicar_tint_vermelho
 
 class Jogo:
     def __init__(self):
         pygame.init()
         self.tela = pygame.display.set_mode((1260, 720))
+        pygame.display.set_caption("O Último Cristal")
         self.clock = pygame.time.Clock()
         self.rodando = True
 
@@ -14,6 +16,7 @@ class Jogo:
         # PLAYER
         # =====================
         self.player = Player(50, 100)
+        self.eliminacoes = 0
 
         # =====================
         # MAPA
@@ -49,29 +52,33 @@ class Jogo:
         # INIMIGOS
         # =====================
         self.inimigos = [
-            Inimigo(220,self.obstaculos[0].top - 32),
-            Inimigo(450,self.obstaculos[1].top - 32),
-            Inimigo(680,self.obstaculos[2].top - 32),
-            Inimigo(950,self.obstaculos[3].top - 32),
-            Inimigo(550,self.obstaculos[5].top - 32),
-            Inimigo(1120,self.obstaculos[7].top - 32)
+            Inimigo(220, self.obstaculos[0].top - 32),
+            Inimigo(450, self.obstaculos[1].top - 32),
+            Inimigo(680, self.obstaculos[2].top - 32),
+            Inimigo(950, self.obstaculos[3].top - 32),
+            Inimigo(550, self.obstaculos[5].top - 32),
+            Inimigo(1120, self.obstaculos[7].top - 32)
         ]
 
         #=====================
         # SPRITES
         #=====================
         self.sprite_chao = pygame.image.load("sprites/chao.png").convert_alpha()
-        self.sprite_chao = pygame.transform.scale(self.sprite_chao,(273, 70))
+        self.sprite_chao = pygame.transform.scale(self.sprite_chao, (273, 70))
 
-        self.sprite_player = pygame.image.load("sprites/princesa_direita.jpeg").convert_alpha()
+        self.sprite_player = pygame.image.load("sprites/princesa_direita.png").convert_alpha()
         self.sprite_player = pygame.transform.scale(self.sprite_player, (50, 60))
-        self.sprite_player_esquerda = pygame.transform.flip(self.sprite_player,True, False)
+        self.sprite_player_esquerda = pygame.transform.flip(self.sprite_player, True, False)
+
+        self.sprite_player_dano = aplicar_tint_vermelho(self.sprite_player)
+        self.sprite_player_esquerda_dano = aplicar_tint_vermelho(self.sprite_player_esquerda)
 
         self.sprite_inimigo_esquerda = pygame.image.load("sprites/inimigo.png").convert_alpha()
+        self.sprite_inimigo_esquerda = pygame.transform.scale(self.sprite_inimigo_esquerda, (39, 32))
+        self.sprite_inimigo_direita = pygame.transform.flip(self.sprite_inimigo_esquerda, True, False)
 
-        self.sprite_inimigo_esquerda = pygame.transform.scale(self.sprite_inimigo_esquerda,(39, 32))
-
-        self.sprite_inimigo_direita = pygame.transform.flip(self.sprite_inimigo_esquerda,True,False)
+        self.sprite_cristal = pygame.image.load("sprites/cristal.png").convert_alpha()
+        self.sprite_cristal = pygame.transform.scale(self.sprite_cristal, (30, 30))
 
         self.fonte = pygame.font.SysFont("Arial", 24)
 
@@ -100,14 +107,19 @@ class Jogo:
             # =====================
             for inimigo in self.inimigos:
                 if inimigo.ativo:
-                    inimigo.update(self.player, self.obstaculos + [self.chao])
+                    inimigo.update(self.player, self.obstaculos + [self.chao], self.eliminacoes)
+                else:
+                    inimigo.atualizar_particulas()
 
             # =====================
             # COLETA DE CRISTAIS
             # =====================
             for cristal in self.cristais:
+                cristal.update()
                 if cristal.coletar(self.player):
                     self.player.pontuacao += 1
+                if cristal.coletado:
+                    cristal.atualizar_particulas()
 
             # =====================
             # RENDER
@@ -126,12 +138,14 @@ class Jogo:
             # cristais
             for cristal in self.cristais:
                 if not cristal.coletado:
-                    cristal.desenhar(self.tela)
+                    self.tela.blit(self.sprite_cristal, (cristal.rect.x - 5, cristal.rect.y - 10))
+                else:
+                    cristal.desenhar_particulas(self.tela)
 
             # inimigos
             for inimigo in self.inimigos:
                 if inimigo.ativo:
-                
+
                     if inimigo.direcao == Inimigo.ESQUERDA:
                         sprite = self.sprite_inimigo_esquerda
                     else:
@@ -142,13 +156,31 @@ class Jogo:
 
                     self.tela.blit(sprite, (x, y))
 
-            # player
-            self.player.desenhar(self.tela)
-            if self.player.direcao == "ESQUERDA":
-                self.tela.blit(self.sprite_player_esquerda, self.player)
-            else:
-                self.tela.blit(self.sprite_player, self.player)
+                else:
+                    inimigo.desenhar_particulas(self.tela)
+                    if not inimigo.contado:
+                        self.eliminacoes += 1
+                        inimigo.contado = True
 
+            # player
+            if self.player.direcao == "ESQUERDA":
+                sprite_atual = (
+                    self.sprite_player_esquerda_dano
+                    if self.player.esta_piscando()
+                    else self.sprite_player_esquerda
+                )
+            else:
+                sprite_atual = (
+                    self.sprite_player_dano
+                    if self.player.esta_piscando()
+                    else self.sprite_player
+                )
+
+            self.tela.blit(sprite_atual, self.player)
+
+            # fumacinha do pulo / poeira ao andar / impacto ao cair
+            for p in self.player.particulas:
+                p.desenhar(self.tela)
 
             # HUD
             hud = self.fonte.render(
