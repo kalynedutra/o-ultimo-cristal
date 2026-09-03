@@ -867,7 +867,7 @@ class Jogo:
         )
 
         texto_cristais = self.fonte.render(
-            "CRISTAIS",
+            "PONTOS",
             True,
             (145, 115, 180)
         )
