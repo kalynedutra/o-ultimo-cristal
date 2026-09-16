@@ -77,46 +77,7 @@ class Botao:
             1,
             border_radius=7
         )
-
-        # Cristal decorativo esquerdo
-        cor_cristal = (
-            (220, 180, 255)
-            if hover
-            else (165, 110, 230)
-        )
-
-        x = self.rect.left + 17
-        y = self.rect.centery
-
-        cristal_esquerdo = [
-            (x, y),
-            (x + 6, y - 5),
-            (x + 11, y),
-            (x + 6, y + 5)
-        ]
-
-        pygame.draw.polygon(
-            tela,
-            cor_cristal,
-            cristal_esquerdo
-        )
-
-        # Cristal decorativo direito
-        x = self.rect.right - 17
-
-        cristal_direito = [
-            (x, y),
-            (x - 6, y - 5),
-            (x - 11, y),
-            (x - 6, y + 5)
-        ]
-
-        pygame.draw.polygon(
-            tela,
-            cor_cristal,
-            cristal_direito
-        )
-
+   
         # Texto
         cor_texto = (
             (250, 240, 255)
