@@ -4,7 +4,9 @@ from player import Player
 from cristal import Cristal
 from inimigo import Inimigo
 from botao import Botao
+from telas import Telas
 from utils import aplicar_tint_vermelho
+from fases import FASES, CHAO
 
 
 class Jogo:
@@ -16,6 +18,11 @@ class Jogo:
     MENU = "menu"
     JOGANDO = "jogando"
     GAME_OVER = "game_over"
+    FASE_COMPLETA = "fase_completa"
+    VITORIA = "vitoria"
+
+    # Frames de espera depois do último cristal (para ver a explosão)
+    ESPERA_FIM_DE_FASE = 55
 
     # =========================================
     # INICIALIZAÇÃO
@@ -33,21 +40,19 @@ class Jogo:
         self.estado = self.MENU
 
         # =========================================
-        # MAPA
+        # MAPA (preenchido por carregar_fase)
         # =========================================
 
-        self.chao = pygame.Rect(0, 540, 1260, 50)
+        self.chao = CHAO
+        self.obstaculos = []
 
-        self.obstaculos = [
-            pygame.Rect(140, 450, 170, 20),
-            pygame.Rect(380, 400, 140, 20),
-            pygame.Rect(600, 340, 180, 20),
-            pygame.Rect(900, 410, 160, 20),
-            pygame.Rect(250, 280, 150, 20),
-            pygame.Rect(500, 220, 170, 20),
-            pygame.Rect(800, 270, 180, 20),
-            pygame.Rect(1050, 170, 150, 20),
-        ]
+        self.indice_fase = 0
+        self.fase = None
+        self.timer_fim_fase = 0
+
+        # Placar no início da fase (usado ao tentar novamente)
+        self.pontos_inicio_fase = 0
+        self.eliminacoes_inicio_fase = 0
 
         # =========================================
         # SPRITES
@@ -113,12 +118,6 @@ class Jogo:
         # FONTES
         # =========================================
 
-        self.fonte_titulo = pygame.font.SysFont(
-            "arial",
-            70,
-            bold=True
-        )
-
         self.fonte_botao = pygame.font.SysFont(
             "arial",
             30
@@ -130,56 +129,53 @@ class Jogo:
         )
 
         # =========================================
-        # BOTÕES
+        # TELAS (menu, game over, etc.)
         # =========================================
 
-        largura_botao = 260
-        altura_botao = 60
+        self.telas = Telas(self.tela)
 
-        centro_x = 1260 // 2 - largura_botao // 2
+        # =========================================
+        # BOTÕES
+        # =========================================
 
         # -----------------------------------------
         # MENU
         # -----------------------------------------
 
         self.botao_jogar = Botao(
-            "Jogar",
-            centro_x,
-            520,
-            largura_botao,
-            altura_botao,
-            self.fonte_botao
+            "Jogar", 490, 425, 280, 60, self.fonte_botao
         )
 
         self.botao_sair = Botao(
-            "Sair",
-            centro_x,
-            595,
-            largura_botao,
-            altura_botao,
-            self.fonte_botao
+            "Sair", 490, 515, 280, 60, self.fonte_botao
         )
 
         # -----------------------------------------
-        # GAME OVER
+        # TELAS DE RESULTADO (mesma posição nas 3)
         # -----------------------------------------
 
         self.botao_reiniciar = Botao(
-            "Jogar novamente",
-            centro_x - 40,
-            490,
-            largura_botao + 80,
-            altura_botao,
-            self.fonte_botao
+            "Tentar novamente", 480, 500, 300, 60, self.fonte_botao
+        )
+
+        self.botao_proxima_fase = Botao(
+            "Próxima fase", 480, 500, 300, 60, self.fonte_botao
+        )
+
+        self.botao_jogar_de_novo = Botao(
+            "Jogar novamente", 480, 500, 300, 60, self.fonte_botao
         )
 
         self.botao_sair_game_over = Botao(
-            "Sair",
-            centro_x,
-            565,
-            largura_botao,
-            altura_botao,
-            self.fonte_botao
+            "Sair", 480, 585, 300, 60, self.fonte_botao
+        )
+
+        self.botao_sair_fase = Botao(
+            "Sair", 480, 585, 300, 60, self.fonte_botao
+        )
+
+        self.botao_sair_vitoria = Botao(
+            "Sair", 480, 585, 300, 60, self.fonte_botao
         )
 
         # =========================================
@@ -193,67 +189,79 @@ class Jogo:
         self.inimigos = []
 
     # =========================================
+    # CONTROLE DE ESTADO
+    # =========================================
+
+    def mudar_estado(self, novo_estado):
+        self.estado = novo_estado
+        self.telas.reiniciar_animacao()
+
+    # =========================================
+    # FASES
+    # =========================================
+
+    def carregar_fase(self, indice):
+        """Monta a fase `indice` (cristais e inimigos novinhos)."""
+
+        self.indice_fase = indice
+        self.fase = FASES[indice]()
+        self.timer_fim_fase = 0
+
+        self.obstaculos = self.fase.plataformas
+
+        self.cristais = [
+            Cristal(x, y) for x, y in self.fase.cristais
+        ]
+
+        self.inimigos = [
+            Inimigo(x, y) for x, y in self.fase.inimigos
+        ]
+
+        # princesa volta ao ponto de partida da fase
+        self.player.rect.topleft = self.fase.spawn
+        self.player.vely = 0
+        self.player.invencivel_timer = 0
+        self.player.particulas = []
+
+        self.pontos_inicio_fase = self.player.pontuacao
+        self.eliminacoes_inicio_fase = self.eliminacoes
+
+    def fase_concluida(self):
+        return bool(self.cristais) and all(
+            c.coletado for c in self.cristais
+        )
+
+    # =========================================
     # INÍCIO / REINÍCIO DA PARTIDA
     # =========================================
 
     def iniciar_partida(self):
+        """Começa o jogo do zero, pela primeira fase."""
 
-        self.player = Player(50, 100)
-
+        self.player = Player(*FASES[0]().spawn)
         self.eliminacoes = 0
 
-        # =========================================
-        # CRISTAIS
-        # =========================================
+        self.carregar_fase(0)
 
-        self.cristais = [
-            Cristal(200, 420),
-            Cristal(450, 370),
-            Cristal(690, 310),
-            Cristal(970, 380),
-            Cristal(325, 250),
-            Cristal(585, 190),
-            Cristal(890, 240),
-            Cristal(1125, 140),
-        ]
+        self.mudar_estado(self.JOGANDO)
 
-        # =========================================
-        # INIMIGOS
-        # =========================================
+    def tentar_fase_novamente(self):
+        """Depois do game over: refaz a fase com 3 vidas novas."""
 
-        self.inimigos = [
-            Inimigo(
-                220,
-                self.obstaculos[0].top - 32
-            ),
+        pontos = self.pontos_inicio_fase
+        eliminacoes = self.eliminacoes_inicio_fase
 
-            Inimigo(
-                450,
-                self.obstaculos[1].top - 32
-            ),
+        self.player = Player(*self.fase.spawn)
+        self.player.pontuacao = pontos
+        self.eliminacoes = eliminacoes
 
-            Inimigo(
-                680,
-                self.obstaculos[2].top - 32
-            ),
+        self.carregar_fase(self.indice_fase)
 
-            Inimigo(
-                950,
-                self.obstaculos[3].top - 32
-            ),
+        self.mudar_estado(self.JOGANDO)
 
-            Inimigo(
-                550,
-                self.obstaculos[5].top - 32
-            ),
-
-            Inimigo(
-                1120,
-                self.obstaculos[7].top - 32
-            ),
-        ]
-
-        self.estado = self.JOGANDO
+    def proxima_fase(self):
+        self.carregar_fase(self.indice_fase + 1)
+        self.mudar_estado(self.JOGANDO)
 
     # =========================================
     # LOOP PRINCIPAL
@@ -288,13 +296,26 @@ class Jogo:
             if evento.type == pygame.QUIT:
                 self.rodando = False
 
+            # ESC sai do jogo
+            if (
+                evento.type == pygame.KEYDOWN
+                and evento.key == pygame.K_ESCAPE
+            ):
+                self.rodando = False
+
+            # ENTER aciona o botão principal da tela
+            enter = (
+                evento.type == pygame.KEYDOWN
+                and evento.key in (pygame.K_RETURN, pygame.K_KP_ENTER)
+            )
+
             # =====================================
             # MENU
             # =====================================
 
             if self.estado == self.MENU:
 
-                if self.botao_jogar.clicado(evento):
+                if self.botao_jogar.clicado(evento) or enter:
                     self.iniciar_partida()
 
                 elif self.botao_sair.clicado(evento):
@@ -306,10 +327,34 @@ class Jogo:
 
             elif self.estado == self.GAME_OVER:
 
-                if self.botao_reiniciar.clicado(evento):
-                    self.iniciar_partida()
+                if self.botao_reiniciar.clicado(evento) or enter:
+                    self.tentar_fase_novamente()
 
                 elif self.botao_sair_game_over.clicado(evento):
+                    self.rodando = False
+
+            # =====================================
+            # FASE CONCLUÍDA
+            # =====================================
+
+            elif self.estado == self.FASE_COMPLETA:
+
+                if self.botao_proxima_fase.clicado(evento) or enter:
+                    self.proxima_fase()
+
+                elif self.botao_sair_fase.clicado(evento):
+                    self.rodando = False
+
+            # =====================================
+            # VITÓRIA
+            # =====================================
+
+            elif self.estado == self.VITORIA:
+
+                if self.botao_jogar_de_novo.clicado(evento) or enter:
+                    self.iniciar_partida()
+
+                elif self.botao_sair_vitoria.clicado(evento):
                     self.rodando = False
 
     # =========================================
@@ -379,7 +424,28 @@ class Jogo:
 
         if self.player.vidas <= 0:
 
-            self.estado = self.GAME_OVER
+            self.mudar_estado(self.GAME_OVER)
+
+            return
+
+        # =========================================
+        # FIM DA FASE
+        # =========================================
+
+        if self.timer_fim_fase == 0 and self.fase_concluida():
+
+            self.timer_fim_fase = self.ESPERA_FIM_DE_FASE
+
+        elif self.timer_fim_fase > 0:
+
+            self.timer_fim_fase -= 1
+
+            if self.timer_fim_fase == 0:
+
+                if self.indice_fase + 1 < len(FASES):
+                    self.mudar_estado(self.FASE_COMPLETA)
+                else:
+                    self.mudar_estado(self.VITORIA)
 
     # =========================================
     # DESENHO
@@ -389,7 +455,9 @@ class Jogo:
 
         if self.estado == self.MENU:
 
-            self.desenhar_menu()
+            self.telas.desenhar_menu(
+                [self.botao_jogar, self.botao_sair]
+            )
 
         elif self.estado == self.JOGANDO:
 
@@ -397,569 +465,32 @@ class Jogo:
 
         elif self.estado == self.GAME_OVER:
 
-            self.desenhar_game_over()
-
-    # =========================================
-    # MENU
-    # =========================================
-
-    def desenhar_menu(self):
-
-        # =========================================
-        # FUNDO
-        # =========================================
-
-        self.tela.fill((8, 4, 25))
-
-        for y in range(720):
-
-            intensidade = int(18 * (y / 720))
-
-            pygame.draw.line(
-                self.tela,
-                (
-                    8 + intensidade // 3,
-                    4 + intensidade // 4,
-                    25 + intensidade
-                ),
-                (0, y),
-                (1260, y)
+            self.telas.desenhar_game_over(
+                [self.botao_reiniciar, self.botao_sair_game_over],
+                self.player.pontuacao,
+                self.eliminacoes,
+                self.indice_fase + 1,
+                len(FASES)
             )
 
-        # =========================================
-        # BRILHO CENTRAL
-        # =========================================
+        elif self.estado == self.FASE_COMPLETA:
 
-        brilho = pygame.Surface(
-            (700, 500),
-            pygame.SRCALPHA
-        )
-
-        for raio in range(240, 20, -20):
-
-            alpha = max(
-                2,
-                int(35 * (1 - raio / 250))
+            self.telas.desenhar_fase_completa(
+                [self.botao_proxima_fase, self.botao_sair_fase],
+                self.fase.nome,
+                self.player.pontuacao,
+                self.eliminacoes,
+                self.player.vidas
             )
 
-            pygame.draw.circle(
-                brilho,
-                (120, 55, 220, alpha),
-                (350, 250),
-                raio
+        elif self.estado == self.VITORIA:
+
+            self.telas.desenhar_vitoria(
+                [self.botao_jogar_de_novo, self.botao_sair_vitoria],
+                self.player.pontuacao,
+                self.eliminacoes,
+                self.player.vidas
             )
-
-        self.tela.blit(
-            brilho,
-            (280, 130)
-        )
-
-        # =========================================
-        # ESTRELAS
-        # =========================================
-
-        estrelas = [
-            (75, 90),
-            (140, 155),
-            (220, 75),
-            (310, 125),
-            (405, 65),
-            (500, 155),
-            (760, 80),
-            (850, 145),
-            (940, 70),
-            (1040, 130),
-            (1150, 85),
-
-            (90, 600),
-            (180, 650),
-            (290, 580),
-            (390, 650),
-            (850, 620),
-            (960, 570),
-            (1080, 640),
-            (1170, 590)
-        ]
-
-        for x, y in estrelas:
-
-            pygame.draw.rect(
-                self.tela,
-                (175, 125, 235),
-                (x, y, 2, 2)
-            )
-
-        # =========================================
-        # MOLDURA
-        # =========================================
-
-        moldura = pygame.Rect(
-            35,
-            30,
-            1190,
-            660
-        )
-
-        pygame.draw.rect(
-            self.tela,
-            (24, 11, 50),
-            moldura,
-            border_radius=18
-        )
-
-        pygame.draw.rect(
-            self.tela,
-            (100, 55, 155),
-            moldura,
-            2,
-            border_radius=18
-        )
-
-        pygame.draw.rect(
-            self.tela,
-            (52, 28, 82),
-            moldura.inflate(-12, -12),
-            1,
-            border_radius=15
-        )
-
-        # =========================================
-        # CRISTAL DO TOPO
-        # =========================================
-
-        cristal_topo = pygame.transform.scale(
-            self.sprite_cristal,
-            (65, 65)
-        )
-
-        self.tela.blit(
-            cristal_topo,
-            (598, 48)
-        )
-
-        # =========================================
-        # TÍTULO
-        # =========================================
-
-        titulo_sombra = self.fonte_titulo.render(
-            "O ÚLTIMO CRISTAL",
-            True,
-            (70, 35, 110)
-        )
-
-        titulo = self.fonte_titulo.render(
-            "O ÚLTIMO CRISTAL",
-            True,
-            (225, 205, 250)
-        )
-
-        titulo_rect = titulo.get_rect(
-            center=(630, 145)
-        )
-
-        self.tela.blit(
-            titulo_sombra,
-            (
-                titulo_rect.x + 4,
-                titulo_rect.y + 4
-            )
-        )
-
-        self.tela.blit(
-            titulo,
-            titulo_rect
-        )
-
-        # =========================================
-        # SUBTÍTULO
-        # =========================================
-
-        subtitulo = self.fonte.render(
-            "EM BUSCA DE LUZ",
-            True,
-            (165, 125, 210)
-        )
-
-        subtitulo_rect = subtitulo.get_rect(
-            center=(630, 210)
-        )
-
-        self.tela.blit(
-            subtitulo,
-            subtitulo_rect
-        )
-
-        pygame.draw.line(
-            self.tela,
-            (105, 55, 160),
-            (450, 240),
-            (810, 240),
-            1
-        )
-
-        # =========================================
-        # FRASE
-        # =========================================
-
-        frase = self.fonte.render(
-            "Encontre os cristais e restaure a luz.",
-            True,
-            (145, 115, 185)
-        )
-
-        frase_rect = frase.get_rect(
-            center=(630, 475)
-        )
-
-        self.tela.blit(
-            frase,
-            frase_rect
-        )
-
-        # =========================================
-        # BOTÕES
-        # =========================================
-
-        self.botao_jogar.desenhar(
-            self.tela
-        )
-
-        self.botao_sair.desenhar(
-            self.tela
-        )
-
-        # =========================================
-        # CRISTAIS DECORATIVOS
-        # =========================================
-
-        cristal_pequeno = pygame.transform.scale(
-            self.sprite_cristal,
-            (45, 45)
-        )
-
-        self.tela.blit(
-            cristal_pequeno,
-            (70, 605)
-        )
-
-        self.tela.blit(
-            cristal_pequeno,
-            (1145, 605)
-        )
-
-    # =========================================
-    # GAME OVER
-    # =========================================
-
-    def desenhar_game_over(self):
-
-        # =========================================
-        # FUNDO
-        # =========================================
-
-        self.tela.fill((8, 3, 22))
-
-        for y in range(720):
-
-            intensidade = int(
-                15 * (y / 720)
-            )
-
-            pygame.draw.line(
-                self.tela,
-                (
-                    8 + intensidade // 3,
-                    3 + intensidade // 5,
-                    22 + intensidade
-                ),
-                (0, y),
-                (1260, y)
-            )
-
-        # =========================================
-        # BRILHO CENTRAL
-        # =========================================
-
-        brilho = pygame.Surface(
-            (700, 500),
-            pygame.SRCALPHA
-        )
-
-        pygame.draw.ellipse(
-            brilho,
-            (65, 30, 110, 70),
-            (0, 0, 700, 500)
-        )
-
-        self.tela.blit(
-            brilho,
-            (280, 100)
-        )
-
-        # =========================================
-        # MOLDURA
-        # =========================================
-
-        moldura = pygame.Rect(
-            250,
-            45,
-            760,
-            625
-        )
-
-        pygame.draw.rect(
-            self.tela,
-            (22, 9, 45),
-            moldura,
-            border_radius=20
-        )
-
-        pygame.draw.rect(
-            self.tela,
-            (100, 55, 160),
-            moldura,
-            2,
-            border_radius=20
-        )
-
-        pygame.draw.rect(
-            self.tela,
-            (50, 25, 80),
-            moldura.inflate(-12, -12),
-            1,
-            border_radius=17
-        )
-
-        # =========================================
-        # CRISTAL DO TOPO
-        # =========================================
-
-        cristal_topo = pygame.transform.scale(
-            self.sprite_cristal,
-            (65, 65)
-        )
-
-        cristal_topo = cristal_topo.copy()
-
-        cristal_topo.fill(
-            (75, 40, 120, 255),
-            special_flags=pygame.BLEND_RGBA_MULT
-        )
-
-        self.tela.blit(
-            cristal_topo,
-            (598, 65)
-        )
-
-        # =========================================
-        # TÍTULO
-        # =========================================
-
-        titulo_sombra = self.fonte_titulo.render(
-            "GAME OVER",
-            True,
-            (65, 30, 95)
-        )
-
-        titulo = self.fonte_titulo.render(
-            "GAME OVER",
-            True,
-            (215, 180, 245)
-        )
-
-        titulo_rect = titulo.get_rect(
-            center=(630, 175)
-        )
-
-        self.tela.blit(
-            titulo_sombra,
-            (
-                titulo_rect.x + 4,
-                titulo_rect.y + 4
-            )
-        )
-
-        self.tela.blit(
-            titulo,
-            titulo_rect
-        )
-
-        # =========================================
-        # MENSAGEM
-        # =========================================
-
-        mensagem = self.fonte.render(
-            "A luz do cristal se apagou...",
-            True,
-            (160, 125, 195)
-        )
-
-        mensagem_rect = mensagem.get_rect(
-            center=(630, 250)
-        )
-
-        self.tela.blit(
-            mensagem,
-            mensagem_rect
-        )
-
-        # =========================================
-        # PAINEL DE RESULTADOS
-        # =========================================
-
-        painel = pygame.Rect(
-            390,
-            295,
-            480,
-            130
-        )
-
-        pygame.draw.rect(
-            self.tela,
-            (16, 7, 34),
-            painel,
-            border_radius=15
-        )
-
-        pygame.draw.rect(
-            self.tela,
-            (90, 50, 145),
-            painel,
-            2,
-            border_radius=15
-        )
-
-        # =========================================
-        # DIVISÓRIA
-        # =========================================
-
-        pygame.draw.line(
-            self.tela,
-            (65, 35, 105),
-            (630, 315),
-            (630, 405),
-            1
-        )
-
-        # =========================================
-        # CRISTAIS ENCONTRADOS
-        # =========================================
-
-        cristal_resultado = pygame.transform.scale(
-            self.sprite_cristal,
-            (38, 38)
-        )
-
-        self.tela.blit(
-            cristal_resultado,
-            (430, 315)
-        )
-
-        numero_cristais = self.fonte_botao.render(
-            str(self.player.pontuacao),
-            True,
-            (225, 195, 255)
-        )
-
-        self.tela.blit(
-            numero_cristais,
-            (475, 317)
-        )
-
-        texto_cristais = self.fonte.render(
-            "PONTOS",
-            True,
-            (145, 115, 180)
-        )
-
-        self.tela.blit(
-            texto_cristais,
-            (425, 365)
-        )
-
-        # =========================================
-        # ELIMINAÇÕES
-        # =========================================
-
-        numero_eliminacoes = self.fonte_botao.render(
-            str(self.eliminacoes),
-            True,
-            (225, 195, 255)
-        )
-
-        numero_rect = numero_eliminacoes.get_rect(
-            center=(680, 330)
-        )
-
-        self.tela.blit(
-            numero_eliminacoes,
-            numero_rect
-        )
-
-        texto_eliminacoes = self.fonte.render(
-            "ELIMINAÇÕES",
-            True,
-            (145, 115, 180)
-        )
-
-        texto_eliminacoes_rect = texto_eliminacoes.get_rect(
-            center=(750, 375)
-        )
-
-        self.tela.blit(
-            texto_eliminacoes,
-            texto_eliminacoes_rect
-        )
-
-        # =========================================
-        # FRASE
-        # =========================================
-
-        frase = self.fonte.render(
-            "A jornada ainda não terminou.",
-            True,
-            (145, 110, 180)
-        )
-
-        frase_rect = frase.get_rect(
-            center=(630, 455)
-        )
-
-        self.tela.blit(
-            frase,
-            frase_rect
-        )
-
-        # =========================================
-        # BOTÕES
-        # =========================================
-
-        self.botao_reiniciar.desenhar(
-            self.tela
-        )
-
-        self.botao_sair_game_over.desenhar(
-            self.tela
-        )
-
-        # =========================================
-        # CRISTAIS DECORATIVOS
-        # =========================================
-
-        cristal_pequeno = pygame.transform.scale(
-            self.sprite_cristal,
-            (50, 50)
-        )
-
-        self.tela.blit(
-            cristal_pequeno,
-            (325, 570)
-        )
-
-        self.tela.blit(
-            cristal_pequeno,
-            (885, 570)
-        )
 
     # =========================================
     # DESENHO DO JOGO
@@ -1100,8 +631,12 @@ class Jogo:
         # HUD
         # =========================================
 
+        coletados = sum(1 for c in self.cristais if c.coletado)
+
         hud = self.fonte.render(
-            f"Pontos: {self.player.pontuacao}  "
+            f"{self.fase.nome}   "
+            f"Cristais: {coletados}/{len(self.cristais)}   "
+            f"Pontos: {self.player.pontuacao}   "
             f"Vidas: {self.player.vidas}",
             True,
             (255, 255, 255)
