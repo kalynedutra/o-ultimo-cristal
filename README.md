@@ -2,96 +2,93 @@
 
 ## Descrição Geral
 
-O jogo é do tipo aventura com exploração. Ele se passa em um universo de cristais que foi destruído, onde o equilíbrio foi perdido após a quebra do cristal principal. A ideia principal é acompanhar uma princesa que precisa restaurar o equilíbrio do mundo recuperando a energia perdida.
+O jogo é uma aventura de plataforma com exploração. Ele se passa em um universo de cristais que foi destruído, onde o equilíbrio foi perdido após a quebra do cristal principal. A ideia é acompanhar uma princesa guardiã que precisa restaurar o equilíbrio do mundo recuperando a energia perdida.
 
 ## Objetivo do Jogo
 
-O jogador deve controlar a personagem principal, explorar o mapa e coletar fragmentos de cristal. A meta principal é reunir os fragmentos e restaurar o cristal fonte para salvar o universo.
+O jogador controla a princesa, sobe pelas plataformas de cada fase e coleta todos os fragmentos de cristal. Ao reunir todos os fragmentos de uma fase, o caminho para a próxima se ilumina. Ao concluir a última fase, o cristal fonte é restaurado e o universo volta a brilhar.
 
 ## Personagem Principal
 
-Uma princesa guardiã do reino de cristais. Ela se move em quatro direções (cima, baixo, esquerda, direita) e possui os seguintes atributos:
+Uma princesa guardiã do reino de cristais. Ela anda para os lados, pula entre as plataformas e pode derrotar inimigos pisando neles. Atributos:
 
-- Vida
+- Vida (começa com 3)
 - Velocidade
 - Pontuação
 
-## Inimigos e Obstáculos
+## Inimigos
 
-Os inimigos são criaturas corrompidas pelo caos, além de barreiras e áreas perigosas espalhadas pelo mapa. O comportamento varia: alguns ficam parados, outros se movimentam automaticamente e alguns podem perseguir o jogador. O jogador perde vida ao encostar em qualquer um deles.
+Criaturas corrompidas pelo caos que patrulham as plataformas e o chão. Elas viram ao chegar na borda, e quando a princesa passa perto (no mesmo nível) elas passam a perseguí-la. O jogador perde vida ao encostar de lado em um inimigo, e pode derrotá-lo pulando em cima dele. Quanto mais inimigos são derrotados, maior o dano dos que restam.
 
-## Cenário (Mapa)
+## Cenário e Fases
 
-O ambiente é um mundo mágico de cristais destruído. O mapa é composto por caminhos, paredes, áreas bloqueadas e regiões perigosas. Os fragmentos ficam espalhados pelo cenário, e o objetivo final está localizado em uma área protegida.
+O ambiente é um mundo mágico de cristais destruído, formado por plataformas flutuantes sobre um chão de grama e pedra. Cada fase é um percurso de plataformas com cristais para coletar e inimigos para enfrentar.
+
+| Fase | Nome                    | Cristais | Inimigos |
+|------|-------------------------|----------|----------|
+| 1    | Os Primeiros Fragmentos | 8        | 6        |
+| 2    | A Ascensão Cintilante   | 10       | 7        |
+
+A **Fase 2 é a fase-modelo**: ela usa a mesma mecânica da Fase 1 e está toda comentada em `fases.py`, para servir de base na criação das próximas fases.
 
 ## Sistema de Pontuação
 
-O jogador ganha pontos ao coletar fragmentos de cristal.
+- Fragmento de cristal = 1 ponto
+- Inimigo pisado = 2 pontos
 
-- Fragmento de cristal = 10 pontos
+A pontuação e as vidas acompanham a jogadora de uma fase para a outra.
 
 ## Sistema de Vida
 
-O jogador começa com 3 vidas e perde uma ao encostar em inimigos ou cair em áreas perigosas. Quando a vida chega a 0, o jogo mostra a tela de derrota.
+A jogadora começa com 3 vidas e perde vida ao encostar nos inimigos (depois do dano ela fica piscando e invencível por um instante). Quando a vida chega a 0, aparece a tela de **Game Over**, onde é possível tentar a fase novamente, com 3 vidas e o placar que ela tinha ao começar aquela fase.
 
 ## Controles
 
 ```
-↑   - mover para cima
-↓   - mover para baixo
-←   - mover para esquerda
-→   - mover para direita
-ESC - sair do jogo
+←  →     - andar para esquerda / direita
+ESPAÇO   - pular
+ENTER    - confirmar (menu e telas de resultado)
+ESC      - sair do jogo
 ```
 
 ## Fluxo do Jogo
 
-O jogo inicia com uma tela inicial e o jogador começa no mapa. Durante a partida, ele explora o cenário, evita inimigos e coleta itens.
-
-- **Vitória:** coletar todos os fragmentos e restaurar o cristal
-- **Derrota:** perder todas as vidas
-
-## Regras do Jogo
-
-- Deve coletar os itens para avançar
-- Colidir com inimigos causa dano
-- Respeitar limites do mapa
+1. **Menu inicial** → Jogar
+2. **Fase** → coletar todos os cristais (evitando ou pisando nos inimigos)
+3. **Fase concluída** → próxima fase
+4. **Vitória** (última fase concluída) ou **Game Over** (vidas zeradas)
 
 ## Estrutura do Projeto
 
 ```
-jogo/
-├── main.py
-├── player.py
-├── inimigo.py
-├── mapa.py
-├── item.py
-├── utils.py
-└── assets/
-    ├── imagens/
-    └── sons/
+o-ultimo-cristal/
+├── main.py       → loop principal, estados do jogo e HUD
+├── fases.py      → todas as fases + guia para criar novas
+├── telas.py      → menu, game over, fase concluída e vitória
+├── botao.py      → botão clicável reutilizável
+├── player.py     → movimentação, pulo, dano e atributos
+├── inimigo.py    → patrulha, perseguição e dano
+├── cristal.py    → fragmentos coletáveis
+├── entidade.py   → classe base dos objetos do jogo
+├── utils.py      → partículas e efeitos visuais
+└── sprites/      → imagens do jogo
 ```
 
-Separação por responsabilidades:
+## Como Criar uma Nova Fase
 
-- `player.py` → movimentação e atributos
-- `inimigo.py` → comportamento
-- `mapa.py` → cenário
-- `item.py` → coleta e pontuação
+Tudo acontece em `fases.py`:
 
-## Funcionalidades Mínimas
+1. Copie a função `criar_fase_2` (a fase-modelo) e renomeie, por exemplo, para `criar_fase_3`.
+2. Mude o nome, o subtítulo e a lista de plataformas com `plataforma(x, y, largura)`.
+3. Posicione cristais e inimigos sobre as plataformas com `cristal_sobre(...)` e `inimigo_sobre(...)`.
+4. Adicione `criar_fase_3` à lista `FASES` no fim do arquivo.
 
-- Movimentação do personagem
-- Um mapa funcional
-- Sistema de colisão
-- Pelo menos 1 inimigo
-- Sistema de vida
-- Sistema de pontuação
+O jogo cuida sozinho da transição entre fases, da pontuação e da tela de vitória. O arquivo também traz dicas de balanceamento (alcance do pulo, tamanho mínimo das plataformas) e avisa no terminal se uma fase tiver algo fora do mapa.
 
-## Melhorias Futuras
+## Planos Futuros
 
-- Novas fases
-- Mais tipos de inimigos
-- Poderes especiais
-- Sistema de salvar progresso
-- Sons e música
+No jogo **O Último Cristal**, pretendo continuar criando novas fases e aperfeiçoando as que já existem. A base do jogo já está pronta, então o foco agora é aprimorar essas fases, deixando-as:
+
+- **Mais difíceis**, com desafios que exijam mais habilidade da jogadora;
+- **Mais interessantes**, com percursos, inimigos e situações mais variados;
+- **Mais bonitas**, com um visual mais caprichado e fiel ao universo de cristais.
